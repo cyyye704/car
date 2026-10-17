@@ -1,0 +1,37 @@
+# Local builds, backups, logs, downloaded references and credentials
+/.build/
+*.log
+*.lock
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Keil generated files and per-user IDE state
+**/out_file/
+*.obj
+*.o
+*.lst
+*.map
+*.lnp
+*.crf
+*.hex
+*.bin
+*.axf
+*.abs
+*.m51
+*.uvopt
+*.uvoptx
+*.uvgui.*
+*.uvguix.*
+
+# Python/OS/editor caches
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# Obtain system compiler extensions directly from the vendor when needed.
+# Keep required official .LIB files and all source licenses tracked.
+**/拓展Keil的C代码中断号.zip

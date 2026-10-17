@@ -1,0 +1,141 @@
+STC32G144K246 + DRV8701E 双驱 V1.3：双轮按键启停
+更新时间：2026-10-17
+
+一、当前测试对象
+
+核心板：逐飞 STC32G144K246 100Pin CoreBoard。
+驱动：逐飞 DRV8701E Dual MotorDriver V1.3，板上标注 DC IN 6–26 V。
+电机：用户提供的逐飞 N30 商品图标注 11.1 V / 33000 rpm，支持 3S 电压。
+供电：12 V；本版按键启动后持续运行，首次验证时架空车轮。
+用户首轮实测：两路均有轻微转动，电机1推动车辆向前，电机2推动车辆向后。
+本版沿用DIR1低、DIR2高方向，按用户要求将两路改为同时持续运行。
+用户已确认：断开12 V、仅USB供电时，按P32后蓝灯保持常亮，再按恢复闪烁。
+在10%占空比下电机仍只轻微动作；尚未确认带载后蓝灯是否自行改变。
+按用户要求进行单项验证：占空比从10%提高到15%，方向与按键启停逻辑保持。
+15%版实际转动效果尚未反馈，尚不能排除带载供电或干扰问题。
+整理Git仓库时发现用户已将源码占空比改为30%，本仓库保留该设置。
+当前30%版仍需上板确认；通用配置流程见development-workflow.md。
+尚未测量硬件PWM、电流或转速。
+
+二、接线（本程序固定映射）
+
+DRV8701E 信号端     核心板
+GND                GND
+NC                 悬空
+PWM1               P7.4（PWMB_CH1_P74）
+DIR1               P7.6
+PWM2               P7.5（PWMB_CH2_P75）
+DIR2               P7.7
+
+电机1、2分别接驱动板标注“电机1”“电机2”的两位接线端子。
+12 V电源正极接驱动板电源“+”，负极接电源“-”。以板上丝印为准。
+核心板使用USB供电，12 V不得接核心板的5V、3V3或任何GPIO。
+两板GND必须接通。NC不接电源，排线不按颜色或照片上下位置猜针序。
+接线或整理裸露线头前断开12 V。端子夹紧导线，不留可能碰到邻端子的散股。
+
+三、烧录与按键操作
+
+1. 架空车轮，驱动开关拨OFF，12 V先断开。核心板接USB。
+2. AiCube-ISP / STC-ISP选择STC32G144K246，打开下列新HEX：
+   D:\PROJECTS\car\STC32G144K246_100Pin_Library\Example\Coreboard_Demo\E14_motor_test\mdk\out_file\MOTOR_TEST.hex
+3. 按住核心板P32，按下并松开RST，再松开P32，进入USB HID下载模式。
+   软件识别USB-Writer后执行下载/编程，等待明确显示成功。
+4. 驱动仍保持OFF。按一下RST运行，松开P32，等待至少2秒。
+   停止状态下蓝灯每秒短亮一下表示已准备好；初始化/停止后等待松键时蓝灯熄灭。
+   本测试未调用debug_init，不提供运行时USB CDC串口；此时CDC串口消失是预期行为。
+   再次烧录仍可用P32+RST进入HID模式，USB仍用于核心板供电。
+5. 确认电源输出关闭时接好驱动电源正负极，然后开启12 V，最后拨驱动ON。
+   暂不按键，两个电机应不转。若自行转动，立即拨OFF并断开12 V，检查接线/程序。
+6. 按一下P32后松开：两路均输出17 kHz、30%占空比，并持续运行。蓝灯常亮。
+   本版已取消0.3秒自动停止；松手后继续运行，长按不会反复启停。
+7. 松开至少0.1秒后再按一下P32：停止两路PWM；松开后蓝灯恢复间歇闪烁。
+   后续按键在“两个电机一起启动”和“两个电机一起停止”之间切换。
+8. 确认两路方向及按键停止有效；结束后先拨OFF，再断开12 V。
+
+占空比不等于额定转速的百分比，也不保证足够克服静摩擦。
+两路同占空比是开环控制，实际转速可能受电机和负载差异影响；精确同速需要编码器反馈。
+如果只轻微抖动或不转，不要直接改到满占空比；先确认对应通道、供电和机械阻力。
+根据本车首轮实测，DIR1固定低、DIR2固定高，使电机2相对于首版反向。
+方向在启动时固定，本版不自动反转。
+OFF是驱动休眠/使能开关，不等于物理断开12 V电源。
+PWM=0且驱动ON时，DRV8701E进入制动状态；OFF休眠时输出为高阻。
+
+重要启动限制：逐飞库pwm_init先把GPIO置高，再配置PWM接管引脚。
+因此每次烧录、复位、插拔USB或重新上电之前，驱动必须OFF。
+初始化完成、蓝灯出现准备好提示后才允许ON。程序并不能消除复位期间的瞬态。
+按键停止由Timer0中断完成，不构成独立硬件保护；异常时用OFF并断开12 V。
+驱动OFF后若程序仍在运行状态，再拨ON会恢复输出；重启驱动前先确认程序已停止。
+
+四、程序与构建
+
+独立工程：
+  STC32G144K246_100Pin_Library\Example\Coreboard_Demo\E14_motor_test\mdk\seekfree.uvproj
+主程序：
+  STC32G144K246_100Pin_Library\Example\Coreboard_Demo\E14_motor_test\user\main.c
+基于已验证的E01工程创建，保留真实STC32G144K246器件和原链接配置。
+原LED例程、共享驱动库和小车主程序均未因本测试修改。
+isr.c/isr.h直接复制官方例程；使用原有Timer0回调分发，不修改interrupt定义。
+
+控制逻辑：
+- 开机等待1秒，再检测按键连续松开100毫秒才允许触发。
+- 停止态按下连续20毫秒后启动两路，使用相同的占空比。
+- 无运行超时，松开按键继续运行；启动后先连续松开100毫秒才接受停止按键。
+- 运行态再次按下，在下一次5毫秒采样时将两路PWM清零。
+- 停止后必须再次连续松键100毫秒，才接受下一次启动；长按不重复切换。
+- 全部输入处理和PWM更新都在同一Timer0回调内，无串口打印或阻塞延时。
+- 两路共用PWMB计数器，频率一致；不启用USB CDC业务中断。
+
+主程序main.c中最常用的三个位置：
+  MOTOR_DUTY_PERCENT：两轮共同占空比，目前30，即30%。修改后需重新编译、烧录。
+  motor_set_running()：将两路PWM一起设为运行值或0。
+  motor_tick()：P32按键消抖、启动/停止切换和蓝灯提示。
+  main()：引脚、方向、PWM和定时中断初始化。
+
+VS Code：终端 → 运行任务 → STC32G: Rebuild motor test (Keil C251)。
+查看日志：终端 → 运行任务 → STC32G: Show last motor test build log。
+Ctrl+Shift+B仍默认编译LED；可通过“任务: 配置默认生成任务”手动选电机任务。
+
+命令行（D:\PROJECTS\car）：
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-motor.ps1
+
+构建状态与完整日志：
+  D:\PROJECTS\car\.build\motor\latest-result.json
+  D:\PROJECTS\car\.build\motor\latest.log
+每次构建还保存单独的keil.log、result.json和MOTOR_TEST.verified.hex。
+脚本必须同时验证Keil成功、0 Errors、新HEX时间戳及Intel HEX校验和才返回成功。
+当前构建结果、生成时间和HEX SHA256以latest-result.json为准。
+当前30%版通过Keil全量构建：0 Errors、0 Warnings，2026-10-17 18:17:36生成HEX。
+30%版HEX SHA256：0D6DAA46B6D828BAB2E2DB3F1440B283691FFED8273BA33B15CD94DC63221300
+主机14个固定场景与4个固定种子随机序列通过；30%实车仍待验证。
+10%双轮连续运行版曾通过Keil全量构建：0 Errors、0 Warnings，2026-10-17 17:47:04生成HEX。
+历史15%验证版通过Keil全量构建：0 Errors、0 Warnings，2026-10-17 17:59:01生成HEX。
+15%版HEX SHA256：081287915655A913E83C8A4A0B121E7C099CE16B3F493B82A2BA2D3CDAE2EF33
+此前10%连续运行版备份：.build\motor-duty10-before-20261017-175818。
+旧短脉冲版本已备份在.build\motor-toggle-before-20261017-174541。
+
+主机逻辑验证（直接编译实际main.c，替换硬件API为测试桩）：
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\motor\run.ps1
+  覆盖启动锁定、按键去抖、两路同占空比、持续运行、再次按下停止以及长按不重复触发。
+  14个固定场景和4个固定种子随机序列全部通过，包含超过60秒的持续运行逻辑验证。
+  结果：.build\motor-logic\latest.log。
+  该验证不测量MCU实际中断周期、PWM波形、电机电流和接线。
+
+五、依据
+
+逐飞驱动官方仓库：
+  https://gitee.com/seekfree/DRV8701E_Brush_Driver_Project
+  本地只读参考：.build\references\DRV8701E_Brush_Driver_Project
+  参考提交：db1a93031f743bd4c70d1e6ebde4d631fe1d12b2
+  双驱\【原理图】原理图 丝印图 尺寸图 位号图\V1.3\DRV8701E Double MotorDriver_V1.3_原理图.pdf
+  P4定义为GND、NC、PWM1、DIR1、PWM2、DIR2；开关控制nSLEEP。
+
+核心板仓库内STC32G144K246_CoreBoard_V1.0.pdf第2页：
+  S2将P3.2经100欧接地，10k上拉到3V3；P5.2蓝灯低电平点亮。
+
+TI DRV8701数据手册，第7.3.1节Table 1：
+  https://www.ti.com/lit/ds/symlink/drv8701.pdf
+
+本地库接口：
+  Example\Coreboard_Demo\libraries\zf_driver\zf_driver_pwm.c/.h
+  Example\Coreboard_Demo\libraries\zf_driver\zf_driver_pit.c/.h
+  Example\Coreboard_Demo\libraries\zf_driver\zf_driver_gpio.c/.h

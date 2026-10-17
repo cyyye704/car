@@ -1,0 +1,227 @@
+STC32G144K246 CoreBoard 开发环境诊断与工作流
+说明：本文保留最初LED环境诊断过程；用户随后已反馈LED烧录调通。
+当前通用配置与开发流程请阅读同目录development-workflow.md，勿把历史日志当作当前构建结果。
+检查日期：2026-10-17（Asia/Shanghai）
+工作目录：D:\PROJECTS\car
+
+一、当前验收状态
+
+已在 2026-10-17 16:33 完成官方 LED 示例全量构建：0 Error(s), 0 Warning(s)。
+通过 .vscode/tasks.json 中的默认任务命令实际调用本机 Keil；Keil 和脚本退出码均为 0。
+新 HEX 生成时间：2026-10-17 16:33:29（Asia/Shanghai）。
+文件大小：326635 字节；Intel HEX 数据记录共 116035 字节。
+已通过新生成时间、记录长度、校验和、EOF、非空数据验证，hexVerified=true。
+SHA256：A81A3703BE4E02FCD23772C922FF397DB577023B6FD3FAE5309FABCD2A6D5FBE
+原文件与归档 SEEKFREE.verified.hex 的 SHA256 一致。
+此前的 L250 已不再出现。本轮未修改许可证、系统配置、源码或中断定义。
+硬件烧录和 LED 实物观察仍需你按第六节手动完成，尚未声称上板验证成功。
+
+二、实际工具与工程
+
+uVision：C:\Keil\UV4\UV4.exe，5.25.3.0
+编译器：C:\Keil\C251\BIN\C251.EXE，5.60.0.0
+汇编器：C:\Keil\C251\BIN\A251.EXE，4.69.13.0
+链接器：C:\Keil\C251\BIN\l251.exe，4.66.93.0
+HEX工具：C:\Keil\C251\BIN\OH251.EXE，1.47.0.0
+
+工程：
+D:\PROJECTS\car\STC32G144K246_100Pin_Library\Example\Coreboard_Demo\E01_led_demo\mdk\seekfree.uvproj
+目标名：stc32g144k246
+工具集：MCS-251（不是 ARM 工具链，也不是 C51）
+C251：LARGE、FLOAT64、ROM(HUGE)、WARNINGLEVEL(3)、OPTIMIZE(0,SIZE)
+链接器：REMOVEUNUSED；保留官方已有警告屏蔽设置。
+实际链接地址：
+  EDATA  0x0-0x3FFF
+  HDATA  0x0-0x3FFF, 0x10000-0x2FFFF
+  HCONST 0xFC4800-0xFFFFFF
+  ECODE  0xFC4800-0xFFFFFF
+CreateExecutable=1，CreateHexFile=1，OutputName=SEEKFREE，OutputDirectory=.\out_file\。
+97 个工程文件路径均存在；未发现缺少源码/库路径。
+
+三、各问题的根因和处理边界
+
+1. C168 / interrupt 大于 31
+   属于 C251 编译器中断号限制，与设备数据库是两件事。
+   使用当前已扩展的 C251 完整重编译，isr.c 的 listing 明确报告：
+   C251 COMPILATION COMPLETE. 0 WARNING(S), 0 ERROR(S)。
+   本次未修改中断定义、未运行中断二进制补丁；所有被 Git 跟踪的 C/H/A51 源码保持不变。
+
+2. Device not found / STC32G144K-32Bit Series / Vendor AI
+   初查时 TOOLS.INI 未注册 STC 数据库和 STCMON251。
+   检查期间在 16:01:36 观察到外部新增：
+     C:\Keil\UV4\stc.cdb
+     C:\Keil\C251\BIN\stcmon251.dll
+     C:\Keil\C251\INC\STC\STC32G144K246.H
+   TOOLS.INI 同时新增 CDB0=UV4\STC.CDB 和 C251 的 STCMON251 TDRV1。
+   这些系统文件不是本次代理写入的；没有执行安装或改动系统 Keil 配置。
+
+   使用 Keil 自带 UVCDB2XML 导出数据库，确定本板的实际记录为：
+     Device = STC32G144K246-32Bit Series
+     Vendor = STC
+     family = C251
+     RegisterFile = STC32G144K246.H
+   对独立临时工程执行 Keil 的 -n 设备查找：旧名字退出 12，新名字退出 0。
+   这证明旧工程元数据与当前设备数据库的名称不匹配。
+
+   已仅在 LED uvproj 中更新 5 个 TargetCommonOption 字段：
+     Device、Vendor、DeviceId=63697、RegisterFile，以及 Cpu 中的设备 IROM 元数据。
+   这些值均来自 Keil 为准确型号自动生成的临时工程，不是换用其他芯片。
+   新数据库的 IROM 起点为 0xFC2800；Target251 内逐飞工程实际链接起点仍为 0xFC4800。
+   修复前后 SEEKFREE.lnp 的 SHA256 一致，实际内存分配与编译选项没有变化。
+   本次重试前，工程 IROM 描述已由外部更新为 0xFC2800 / 0x3D800；予以保留。
+   实际 LNP 中 HCONST/ECODE 仍使用官方的 0xFC4800-0xFFFFFF。
+
+   更换电脑或重装 Keil 后，如没有对应设备支持：
+   先说明并批准系统改动，再使用官方 STC-ISP 的“Keil仿真设置”中的
+   “添加型号和头文件到Keil中 / 添加STC仿真器驱动到Keil中”，选择 C:\Keil。
+   逐飞本手册要求 STC-ISP V6.96F 以上；新版本可能名为 AiCube-ISP，以官方版本为准。
+   不要手工伪造数据库记录，或选择别的 MCU 来消除提示。
+
+3. 调试器设置
+   工程使用 STCMON251.DLL，RunDebugAfterBuild=0。
+   初次诊断的 TargetSelection=-1 已在重试前由外部恢复为 1；本轮保留当前配置。
+   本次 -r 构建没有启动调试、没有连接 USB、没有下载 Flash。
+   STC 调试驱动当前已存在，但硬件调试功能未验证；它不是 L250 的原因。
+   本工作流使用 STC-ISP 烧录；不要把 VS Code F5 当作已配置的硬件调试入口。
+
+4. 旧 uVision 与 ARM 配置混用提示
+   TOOLS.INI 还含较新的 ARMCLANG 配置，启动旧 UV4 时曾出现：
+   Registered ARM Compiler ignored, Version needs to be 5 or higher. Path: 'ARMCLANG' !
+   未改动全局 ARM 配置。采用 Keil 官方 -j0 静默参数，并在本机验证能够进入 C251 构建。
+   初次诊断创建的被弹窗卡住的 UV4 进程已关闭；用户原有 UV4 窗口未关闭。
+
+5. L250 / 0800H（历史问题，本次复验已通过）
+   初次诊断时链接器处于 Eval Version，限制 2 KiB；完整官方工程超过该限制。
+   加设备数据库、选择芯片、调整调试器或处理中断扩展，均不能解除此限制。
+   没有修改许可证，也没有裁剪官方工程、替换库或降低功能以制造通过结果。
+   16:33 本轮重试使用同一路径完整链接成功，日志没有 L250，实际生成并验证了 HEX。
+   这里只记录实际构建结果，没有检查或披露用户的许可证内容。
+
+四、今后若再次出现 L250 的授权检查方法
+
+当前构建已经通过，无需为本次验收重复配置授权。以下步骤仅用于以后出现 L250 时。
+
+1. 打开 C:\Keil\UV4\UV4.exe，进入 File -> License Management。
+2. 查看 Product / License 信息是否包含有效的 C251 / DK251 产品授权。
+   显示 Evaluation，或只有 MDK-ARM 的授权，都不能证明 C251 已激活。
+3. 如果已有学校/单位/个人提供的 C251 授权，按其单机或浮动授权方式配置。
+   有效的单机授权可依 Keil 官方文档使用 PSN + CID 获取 LIC，再通过 Add LIC 添加。
+   配置授权若要求管理员权限，请手动以管理员身份运行 Keil；本次不执行此操作。
+   如没有 C251 授权，需向单位管理员或 Keil 正规渠道确认授权方式。
+4. 授权配置完毕后重新执行全量构建，以实际不再出现 L250、0 Error(s) 和新 HEX 为准。
+   仅能启动 C251.EXE 或只编译一个 .c 文件，不足以证明完整工程能够链接。
+5. 原先已打开的 Keil 窗口可能仍缓存旧设备配置。先处理自己的未保存内容，再重新打开
+   磁盘上的 seekfree.uvproj；避免将旧窗口配置重新保存覆盖本次设备修正。
+
+授权管理文档：
+https://www.keil.com/support/man/docs/license/license_management.asp
+单机授权官方安装流程：
+https://www.keil.com/support/man/docs/license/license_sul_install.asp
+评估版限制：
+https://www2.keil.com/limits
+
+五、VS Code 日常构建
+
+1. 使用 VS Code 打开整个 D:\PROJECTS\car 文件夹，而不是只打开某个 .c 文件，
+   也不是仅打开下一层仓库目录。任务位于 car\.vscode\tasks.json。
+2. 按 Ctrl+Shift+B，运行默认任务：STC32G: Rebuild LED (Keil C251)。
+3. 任务在集成终端输出完整编译日志；Problems 面板可以定位 C251 错误和链接错误。
+4. 查看最后日志：Terminal -> Run Task -> STC32G: Show last LED build log。
+   或直接打开 D:\PROJECTS\car\.build\led\latest.log。
+5. 默认总是全量重编译。脚本还可传 -b / -Incremental 做增量编译；如果没有新 HEX，
+   增量空构建不会满足本流程的新产物验收，需改用默认全量任务。
+
+相同命令可在 PowerShell 中执行：
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\PROJECTS\car\scripts\build-led.ps1
+查看日志：
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\PROJECTS\car\scripts\build-led.ps1 -ShowLog
+
+ExecutionPolicy Bypass 只对该任务启动的 PowerShell 进程生效，不更改系统执行策略。
+脚本使用真实 Keil -r/-t/-j0/-o，等待退出，默认超时 120 秒；不会调用仿真或烧录。
+仅在退出码为 0/1、日志包含 0 Error(s)、HEX 时间属于本轮构建且通过 Intel HEX
+记录长度/校验和/EOF/非空数据检查后，才输出 VERIFIED 并标记 success=true。
+已直接读取 tasks.json 的默认任务并执行其 command/args；本轮全量构建成功，返回 0。
+尚未模拟 VS Code GUI 中的键盘操作；默认任务定义、实际执行命令、日志和 HEX 均已验证。
+
+每次构建保存：
+  .build\led\<时间戳>-<进程号>\keil.log       原始 Keil 日志
+  .build\led\<时间戳>-<进程号>\build.log      UTF-8 任务日志
+  .build\led\<时间戳>-<进程号>\result.json    退出码、原因与 HEX 验证状态
+  .build\led\latest.log                     最近完成的构建日志
+  .build\led\latest-result.json             最近完成的结果
+  只有成功验证后，归档目录才会新增 SEEKFREE.verified.hex 并记录 SHA256。
+  已有旧 HEX 会备份为 previous.hex；失败时它不被当作本次产物。
+
+六、成功构建后的 HEX 与 USB 烧录
+
+本次成功构建并验证的 HEX 绝对路径：
+D:\PROJECTS\car\STC32G144K246_100Pin_Library\Example\Coreboard_Demo\E01_led_demo\mdk\out_file\SEEKFREE.hex
+
+对应的固定归档副本（可用于对照，之后重建不会覆盖此副本）：
+D:\PROJECTS\car\.build\led\20261017-163318-897-44624\SEEKFREE.verified.hex
+
+只有构建日志出现 VERIFIED、latest-result.json 中 success=true 且 hexVerified=true，
+才进入下面的烧录步骤。这些 USB/按键操作需要你手动完成，本次没有烧录硬件。
+
+1. 使用数据线将核心板 Type-C 接到 Windows。首次验证仅连接核心板 USB。
+   100PIN 板的这个 Type-C 直接接 MCU USB_DP/DN，按手册使用 USB HID 下载，
+   不需要将它误当成 CH340 串口，也不需要另接下载器。
+2. 按住 P32，再按住 RST；松开 RST，最后松开 P32，进入 USB ISP 模式。
+   等效方式为按住 P32 重新上电，然后松开 P32。
+3. 打开官方 STC-ISP/AiCube-ISP，型号选 STC32G144K246；确认设备列表出现
+   (HID1) USB-Writer（HID编号可能随本机枚举变化）。
+4. 点击“打开程序文件”，选择上面的最新 SEEKFREE.hex。
+5. 点击“下载/编程”，等待软件显示“操作成功”。如提示重新上电，重复进入 ISP 的按键顺序。
+6. 下载完成后按 RST 或重新上电，运行程序。该 LED 示例在 P5.2 每 200 ms 切换电平，
+   应看到核心板蓝色 LED 闪烁；完整亮灭周期约 400 ms。
+7. 没有 HID 设备时先检查数据线和 P32/RST 顺序。外部 IO 反向供电可能使 RST 失效，
+   可断开外接 IO，仅接 Type-C 再试。驱动安装或系统变更请先确认需求并批准。
+
+本例 main.c 使用 clock_init(SYSTEM_CLOCK_96M)，时钟由库代码设置；不要仅凭 ISP
+界面中的频率选项推断程序实际系统时钟。自动 CDC 下载依赖板内已有合适程序，
+首次烧录采用上面的 P32/RST 手动 USB ISP 流程。
+
+七、改动、备份与复验依据
+
+原始 LED 示例与原有构建产物备份：
+D:\PROJECTS\car\.build\20261017-155828\E01_led_demo-before
+该备份保留任务开始时用户已有的 TargetSelection=-1 配置。
+旧 keil-build.log 已同时备份为 previous-keil-build.log。
+
+设备查找复验：
+  .build\20261017-155828\device-lookup-results.txt
+  .build\20261017-155828\stc144k-device-database.xml
+  .build\20261017-155828\exact-device.uvproj
+初次设备修正后的失败构建（历史 L250 证据）：
+  .build\20261017-155828\corrected-device-rebuild.log
+初次环境快照（历史状态；仅工具版本、文件摘要和诊断信息，不含许可证）：
+  .build\20261017-155828\environment-summary.json
+本次成功构建证据：
+  .build\led\20261017-163318-897-44624\keil.log
+  .build\led\20261017-163318-897-44624\build.log
+  .build\led\20261017-163318-897-44624\result.json
+  .build\led\20261017-163318-897-44624\SEEKFREE.verified.hex
+本轮执行前的工程和工作流文档备份：.build\retry-before-20261017-163318。
+
+新增工作流文件：
+  .vscode\tasks.json
+  scripts\build-led.ps1
+  docs\STC32G-workflow.txt
+仓库内只修正 E01_led_demo 的 seekfree.uvproj；没有修改小车主程序。
+
+资料依据：
+本仓库 README.md：C251 V5.60 环境与 P32 USB 下载要求。
+本仓库【文档】说明书 芯片手册等\STC32G144K 100PIN核心板说明书（1.0）.pdf：
+  p7-8/p22 设备支持导入；p12-17 USB ISP；p23 中断扩展；p24 时钟与反向供电。
+Keil CLI（含退出码 12、-j0、-o、-r）：
+https://www.keil.com/support/man/docs/uv4/uv4_commandline.asp
+Keil 等待 GUI 构建完成：
+https://www.keil.com/support/docs/3998.htm
+VS Code 默认任务、Ctrl+Shift+B 与 Problem Matcher：
+https://code.visualstudio.com/docs/debugtest/tasks
+STC 官方库说明：
+https://www.stcmicro.com/pdf/stc32g-software-lib-user%20manual-20240910.pdf
+
+后续固定顺序：保存 LED 源码 -> Ctrl+Shift+B -> 确认 VERIFIED/0 Errors/新 HEX ->
+STC-ISP 手动烧录 -> 上板观察 LED。构建若失败，先处理日志中的错误，不烧录旧产物。
+LED 验收完成前及完成后，均不自动修改小车主程序；等待下一步指令。

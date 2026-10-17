@@ -1,0 +1,12 @@
+# Preserve the mixed encodings and line endings of vendored source files.
+* -text
+
+# Project-maintained text uses LF in Git; PowerShell supports LF on Windows.
+/.gitignore text eol=lf
+/.gitattributes text eol=lf
+/README.md text eol=lf
+/UPSTREAM.md text eol=lf
+/docs/*.md text eol=lf
+/scripts/*.ps1 text eol=lf
+/tests/motor/* text eol=lf
+/.vscode/*.json text eol=lf
